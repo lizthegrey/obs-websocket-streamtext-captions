@@ -41,6 +41,12 @@ var argv = yargs(process.argv.slice(2))
       type: "string",
       nargs: 1,
     },
+    silent: {
+      alias: "s",
+      describe: "Hide additional logging and output",
+      type: "boolean",
+      nargs: 0,
+    }
   })
   .parseSync();
 
@@ -50,6 +56,19 @@ const MIN_CHAR_PER_CAPTION = 80;
 const MAX_SECONDS_PER_CAPTION = 6;
 
 var isObsConnected = false;
+
+function log(msg: any, type: "log" | "error" = "log") {
+  if (argv.silent) {
+    return;
+  }
+
+  if (type === "error") {
+    console.error(msg);
+    return;
+  }
+
+  console.log(msg);
+}
 
 function makeRequest(eventName: string, last: number) {
   var url = `https://www.streamtext.net/text-data.ashx?event=${eventName}&last=${last}`;
@@ -87,15 +106,15 @@ function makeRequest(eventName: string, last: number) {
         }, 500);
       } else {
         // no data wait and try again
-        console.log("No new text received. Trying again after timeout...");
+        log("No new text received. Trying again after timeout...");
         setTimeout(() => {
           makeRequest(eventName, last);
         }, 1000);
       }
     })
     .catch((error: any) => {
-      console.error(error);
-      console.log("Error getting text. Trying again after timeout...");
+      log(error, "error");
+      log("Error getting text. Trying again after timeout...");
       setTimeout(() => {
         makeRequest(eventName, last);
       }, 1000);
@@ -141,13 +160,13 @@ function sendTextToObs(sendingText: string) {
     .catch((error: OBSWebSocketError) => {
       switch (error.code) {
         case -1:
-          console.log("OBS not listening on port.");
+          log("OBS not listening on port.");
           break;
         case 501:
-          console.log("No stream in progress.");
+          log("No stream in progress.");
           break;
         default:
-          console.error(error);
+          log(error, "error");
       }
       // try again
       setTimeout(() => {
@@ -158,9 +177,9 @@ function sendTextToObs(sendingText: string) {
 
 function checkCaptionTimeout() {
   // console.log("Timeout at " + ( Date.now() - lastCaptionSendTime) );
-  console.log("...");
+  log("...");
   if (Date.now() - lastCaptionSendTime > MAX_SECONDS_PER_CAPTION * 1000) {
-    console.log("Too long between caption updates, sending current buffer!...");
+    log("Too long between caption updates, sending current buffer!...");
     sendAccumulatedCaption();
   }
 }
@@ -168,7 +187,7 @@ function checkCaptionTimeout() {
 // set up obs
 if (argv.obsaddress != undefined) {
   const addr = argv.obsaddress;
-  console.log("Connecting to OBS server... ");
+  log("Connecting to OBS server... ");
   obs
     .connect(addr, argv.obspassword!)
     .then(() => {
@@ -182,11 +201,11 @@ if (argv.obsaddress != undefined) {
       if (err.code == -1) {
         console.log("OBS not listening at " + addr);
       } else {
-        console.error(err);
+        log(err, "error");
       }
       process.exit(1);
     });
 }
 
-console.log("Connecting to StreamText event " + argv.eventname);
+log("Connecting to StreamText event " + argv.eventname);
 makeRequest(argv.eventname, 0);
